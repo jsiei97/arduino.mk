@@ -2,7 +2,7 @@
 #
 #                         edam's arduino makefile
 #_______________________________________________________________________________
-#                                                                    version 0.1
+#                                                                    version 0.2
 #
 # Copyright (c) 2011 Tim Marston <tim@ed.am>.
 #
@@ -43,7 +43,7 @@
 #
 #   $ ln -s ~/src/arduino.mk Makefile
 #
-# You also need to set up a couple of environment varibales. ARDUINODIR should
+# You also need to set up a couple of environment variables. ARDUINODIR should
 # be set to the path where you unpacked the arduino software from arduino.cc
 # (it defaults to ~/opt/arduino if unset).  You might be best to set this in
 # your ~/.profile by adding something like this:
@@ -52,21 +52,21 @@
 #
 # You will also need to set BOARD to the type of arduino you're using.  This
 # can be done when running make (or you could set a default in ~/.profile and
-# iverride it as necessary).  For example:
+# override it as necessary).  For example:
 #
 #   $ export BOARD=uno
 #   $ make
 #
 # You may also need to set SERIALDEV if it is not detected correctly.
 #
-# The presence of a .ino or .pde file causes the arduino.mk to atuomatically
-# determine va;ues for SOURCES, TARGET and LIBRARIES.  Any .c, .cc and .cpp
-# files in the project directory (or any "util" or "utility" subdirectoried)
-# are automatically included in the build and are scanned for Atduino libraries
-# that have been #included.
+# The presence of a .ino (or .pde) file causes the arduino.mk to automatically
+# determine values for SOURCES, TARGET and LIBRARIES.  Any .c, .cc and .cpp
+# files in the project directory (or any "util" or "utility" subdirectories)
+# are automatically included in the build and are scanned for Arduino libraries
+# that have been #included. Note, there can only be one .ino (or .pde) file.
 #
 # Alternatively, if you want to manually specify build variables, create a
-# Makefile that defines SOURCES and LIBRARARIES and then includes arduino.mk.
+# Makefile that defines SOURCES and LIBRARIES and then includes arduino.mk.
 # (There is no need to define TARGET).  Here is an example Makefile:
 #
 #   SOURCES := main.cc other.cc
@@ -78,23 +78,34 @@
 # ARDUINODIR   The path where you have installed/unpacked the arduino software
 #              (from http://arduino.cc/)
 #
+# ARDUINOCONST The arduino software version, as an integer, used to define the
+#              ARDUINO version constant. This defaults to 100 if undefined.
+#
+# AVRDUDECONF  The avrdude.conf to use. If undefined, this defaults to a guess
+#              based on where the avrdude in use is. If empty, no avrdude.conf
+#              is passed to avrdude (to the system default is used).
+#
+# AVRTOOLSPATH A space-separated list of directories to search in order when
+#              lookin for the avr build tools. This defaults to the system PATH
+#              followed by subdirectories in ARDUINODIR if undefined.
+#
 # BOARD        Specify a target board type.  Run `make boards` to see available
 #              board types.
 #
-# SERIALDEV    The unix device of the device where the arduino can be found.
+# LIBRARIES    A list of arduino libraries to build and include.  This is set
+#              automatically if a .ino (or .pde) is found.
+#
+# SERIALDEV    The unix device name of the serial device that is the arduino.
 #              If unspecified, an attempt is made to determine the name of a
 #              connected arduino's serial device.
 #
-# TARGET       The name of the target file.  This is set automatically if a
-#              .ino or .pde is found, but it is not neccesary to set it
-#              otherwise.
-#
 # SOURCES      A list of all source files of whatever language.  The language
 #              type is determined by the file extension.  This is set
-#              automatically if a .ino or .pde is found.
+#              automatically if a .ino (or .pde) is found.
 #
-# LIBRARIES    A list of arduino libraries to build and include.  This is set
-#              automatically if a .ino or .pde is found.
+# TARGET       The name of the target file.  This is set automatically if a
+#              .ino (or .pde) is found, but it is not necessary to set it
+#              otherwise.
 #
 # This makefile also defines the following goals for use on the command line
 # when you run make:
@@ -111,52 +122,92 @@
 # boards       Display a list of available board names, so that you can set the
 #              BOARD environment variable appropriately.
 #
-# monitor      Start `screen` on the serial device.  It is ment to be an
-#              equivelant to the arduino serial monitor.
+# monitor      Start `screen` on the serial device.  This is meant to be an
+#              equivalent to the arduino serial monitor.
 #
 # <file>       Builds the specified file, either an object file or the target,
 #              from those that that would be built for the project.
 #_______________________________________________________________________________
 #
 
-# The full path to the arduino software, from arduino.cc
+# default arduino software directory, check software exists
 ifndef ARDUINODIR
 ARDUINODIR := $(wildcard ~/opt/arduino)
 endif
-
-# check arduino software
-ifeq ($(wildcard $(ARDUINODIR)/hardware/arduino/boards.txt), )
+ifeq "$(wildcard $(ARDUINODIR)/hardware/arduino/boards.txt)" ""
 $(error ARDUINODIR is not set correctly; arduino software not found)
+endif
+
+# default arduino version
+ARDUINOCONST ?= 100
+
+# default path for avr tools
+ifndef AVRTOOLSPATH
+AVRTOOLSPATH := $(subst :, , $(PATH))
+AVRTOOLSPATH += $(ARDUINODIR)/hardware/tools
+AVRTOOLSPATH += $(ARDUINODIR)/hardware/tools/avr/bin
 endif
 
 # auto mode?
 INOFILE := $(wildcard *.ino *.pde)
 ifdef INOFILE
-ifneq ($(words $(INOFILE)), 1)
+ifneq "$(words $(INOFILE))" "1"
 $(error There is more than one .pde or .ino file in this directory!)
 endif
+
+# automatically determine sources and targeet
 TARGET := $(basename $(INOFILE))
 SOURCES := $(INOFILE) \
 	$(wildcard *.c *.cc *.cpp) \
 	$(wildcard $(addprefix util/, *.c *.cc *.cpp)) \
 	$(wildcard $(addprefix utility/, *.c *.cc *.cpp))
+
 # automatically determine included libraries
 ARDUINOLIBSAVAIL := $(notdir $(wildcard $(ARDUINODIR)/libraries/*))
 LIBRARIES := $(filter $(ARDUINOLIBSAVAIL), \
 	$(shell sed -ne "s/^ *\# *include *[<\"]\(.*\)\.h[>\"]/\1/p" $(SOURCES)))
+
 endif
 
-# no target? use default
-ifndef TARGET
-TARGET := a.out
+# no serial device? make a poor attempt to detect an arduino
+SERIALDEVGUESS := 0
+ifeq "$(SERIALDEV)" ""
+SERIALDEV := $(firstword $(wildcard \
+	/dev/ttyACM? /dev/ttyUSB? /dev/tty.usbmodem*))
+SERIALDEVGUESS := 1
 endif
 
-# no serial device? attempt to detect an arduino
-ifndef SERIALDEV
-SERIALDEV := $(firstword $(wildcard /dev/ttyACM? /dev/ttyUSB?))
+# software
+findsoftware = $(firstword $(wildcard $(addsuffix /$(1), $(AVRTOOLSPATH))))
+CC := $(call findsoftware,avr-gcc)
+CXX := $(call findsoftware,avr-g++)
+LD := $(call findsoftware,avr-ld)
+AR := $(call findsoftware,avr-ar)
+OBJCOPY := $(call findsoftware,avr-objcopy)
+AVRDUDE := $(call findsoftware,avrdude)
+
+# files
+TARGET := $(if $(TARGET),$(TARGET),a.out)
+OBJECTS := $(addsuffix .o, $(basename $(SOURCES)))
+ARDUINOSRCDIR := $(ARDUINODIR)/hardware/arduino/cores/arduino
+ARDUINOLIBSDIR := $(ARDUINODIR)/libraries
+ARDUINOLIB := _arduino.a
+ARDUINOLIBTMP := $(ARDUINOLIB).tmp
+ARDUINOLIBOBJS := $(patsubst %, $(ARDUINOLIBTMP)/%.o, $(basename $(notdir \
+	$(wildcard $(addprefix $(ARDUINOSRCDIR)/, *.c *.cpp)))))
+ARDUINOLIBOBJS += $(foreach lib, $(LIBRARIES), \
+	$(patsubst %, $(ARDUINOLIBTMP)/%.o, $(basename $(notdir \
+	$(wildcard $(addprefix $(ARDUINOLIBSDIR)/$(lib)/, *.c *.cpp)) \
+	$(wildcard $(addprefix $(ARDUINOLIBSDIR)/$(lib)/utility/, *.c *.cpp)) ))))
+ifeq "$(AVRDUDECONF)" ""
+ifeq "$(AVRDUDE)" "$(ARDUINODIR)/hardware/tools/avr/bin/avrdude"
+AVRDUDECONF := $(ARDUINODIR)/hardware/tools/avr/etc/avrdude.conf
+else
+AVRDUDECONF := $(wildcard $(AVRDUDE).conf)
+endif
 endif
 
-# no board? oh dear...
+# no board?
 ifndef BOARD
 ifneq "$(MAKECMDGOALS)" "boards"
 ifneq "$(MAKECMDGOALS)" "clean"
@@ -164,17 +215,6 @@ $(error BOARD is unset.  Type 'make boards' to see possible values)
 endif
 endif
 endif
-
-# files
-OBJECTS := $(addsuffix .o, $(basename $(SOURCES)))
-ARDUINOSRCDIR := $(ARDUINODIR)/hardware/arduino/cores/arduino
-ARDUINOLIB := _arduino.a
-ARDUINOLIBTMP := _arduino.a.tmp
-ARDUINOLIBOBJS := $(patsubst %, $(ARDUINOLIBTMP)/%.o, $(basename $(notdir \
-	$(wildcard $(addprefix $(ARDUINOSRCDIR)/, *.c *.cpp)))))
-ARDUINOLIBOBJS += $(foreach lib, $(LIBRARIES), \
-	$(patsubst %, $(ARDUINOLIBTMP)/%.o, $(basename $(notdir \
-	$(wildcard $(addprefix $(ARDUINODIR)/libraries/$(lib)/, *.c *.cpp))))))
 
 # obtain board parameters from the arduino boards.txt file
 BOARDS_FILE := $(ARDUINODIR)/hardware/arduino/boards.txt
@@ -189,25 +229,31 @@ BOARD_UPLOAD_SPEED := \
 BOARD_UPLOAD_PROTOCOL := \
 	$(shell sed -ne "s/$(BOARD).upload.protocol=\(.*\)/\1/p" $(BOARDS_FILE))
 
-# software
-CC := avr-gcc
-CXX := avr-g++
-LD := avr-ld
-AR := avr-ar
-OBJCOPY := avr-objcopy
-AVRDUDE := avrdude
+# invalid board?
+ifeq "$(BOARD_BUILD_MCU)" ""
+ifneq "$(MAKECMDGOALS)" "boards"
+ifneq "$(MAKECMDGOALS)" "clean"
+$(error BOARD is invalid.  Type 'make boards' to see possible values)
+endif
+endif
+endif
 
 # flags
-CPPFLAGS = -Os -Wall -fno-exceptions -ffunction-sections -fdata-sections
-CPPFLAGS += -mmcu=$(BOARD_BUILD_MCU) -DF_CPU=$(BOARD_BUILD_FCPU)
+CPPFLAGS := -Os -Wall -fno-exceptions -ffunction-sections -fdata-sections
+CPPFLAGS += -funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums
+CPPFLAGS += -mmcu=$(BOARD_BUILD_MCU)
+CPPFLAGS += -DF_CPU=$(BOARD_BUILD_FCPU) -DARDUINO=$(ARDUINOCONST)
 CPPFLAGS += -I. -Iutil -Iutility -I$(ARDUINOSRCDIR)
 CPPFLAGS += -I$(ARDUINODIR)/hardware/arduino/variants/$(BOARD_BUILD_VARIANT)/
 CPPFLAGS += $(addprefix -I$(ARDUINODIR)/libraries/, $(LIBRARIES))
 CPPFLAGS += $(patsubst %, -I$(ARDUINODIR)/libraries/%/utility, $(LIBRARIES))
-AVRDUDEFLAGS = -C $(ARDUINODIR)/hardware/tools/avrdude.conf -DV
+AVRDUDEFLAGS := $(addprefix -C , $(AVRDUDECONF)) -DV
 AVRDUDEFLAGS += -p $(BOARD_BUILD_MCU) -P $(SERIALDEV)
 AVRDUDEFLAGS += -c $(BOARD_UPLOAD_PROTOCOL) -b $(BOARD_UPLOAD_SPEED)
-LINKFLAGS = -Os -Wl,--gc-sections -mmcu=$(BOARD_BUILD_MCU)
+LINKFLAGS := -Os -Wl,--gc-sections -mmcu=$(BOARD_BUILD_MCU)
+
+# figure out which arg to use with stty
+STTYFARG := $(shell stty --help > /dev/null 2>&1 && echo -F || echo -f)
 
 # default rule
 .DEFAULT_GOAL := all
@@ -226,7 +272,10 @@ upload:
 	@test -n "$(SERIALDEV)" || { \
 		echo "error: SERIALDEV could not be determined automatically." >&2; \
 		exit 1; }
-	stty -F $(SERIALDEV) hupcl
+	@test 0 -eq $(SERIALDEVGUESS) || { \
+		echo "*GUESSING* at serial device:" $(SERIALDEV); \
+		echo; }
+	stty $(STTYFARG) $(SERIALDEV) hupcl
 	$(AVRDUDE) $(AVRDUDEFLAGS) -U flash:w:$(TARGET).hex:i
 
 clean:
@@ -243,6 +292,12 @@ monitor:
 	@test -n "$(SERIALDEV)" || { \
 		echo "error: SERIALDEV could not be determined automatically." >&2; \
 		exit 1; }
+	@test -n `which screen` || { \
+		echo "error: can't find GNU screen, you might need to install it." >&2 \
+		ecit 1; }
+	@test 0 -eq $(SERIALDEVGUESS) || { \
+		echo "*GUESSING* at serial device:" $(SERIALDEV); \
+		echo; }
 	screen $(SERIALDEV)
 
 # building the target
@@ -282,5 +337,13 @@ $(ARDUINOLIBTMP)/%.o: $(ARDUINODIR)/libraries/*/%.c
 	$(COMPILE.c) -o $@ $<
 
 $(ARDUINOLIBTMP)/%.o: $(ARDUINODIR)/libraries/*/%.cpp
+	@test -d $(ARDUINOLIBTMP) || mkdir $(ARDUINOLIBTMP)
+	$(COMPILE.cpp) -o $@ $<
+
+$(ARDUINOLIBTMP)/%.o: $(ARDUINODIR)/libraries/*/utility/%.c
+	@test -d $(ARDUINOLIBTMP) || mkdir $(ARDUINOLIBTMP)
+	$(COMPILE.c) -o $@ $<
+
+$(ARDUINOLIBTMP)/%.o: $(ARDUINODIR)/libraries/*/utility/%.cpp
 	@test -d $(ARDUINOLIBTMP) || mkdir $(ARDUINOLIBTMP)
 	$(COMPILE.cpp) -o $@ $<
