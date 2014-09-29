@@ -1,0 +1,41 @@
+version 0.5 - 4th March 2013
+
+	- added support for third-party libraries (via the configurable library
+	  path variable, LIBRARYPATH)
+	- improved OS X spport
+	- fixed support for .C c++ source files
+	- made flags variables more easily modifiable
+	- minor bug fixes
+	- added support for burning bootloaders
+
+version 0.4 - 23rd November 2012
+
+	- the upload goal now depends on the target goal
+	- added support the Leonardo
+	- fixed boards goal on OS X
+	- added (some) support for busybox
+	- other bug fixes
+
+version 0.3 - 24th April 2012
+
+	- detect system arduino software in /usr/share/arduino
+	- static library is build without risk of filename clashes
+	- dependency file generation
+	- added 'size' goal
+	- 'upload' goal is no longer run by default
+	- detect arduino on usbserial on OSX
+	- other bug fixes
+
+version 0.2 - 21st February 2012
+
+	- added support for OS X
+	- fixed building of included arduino libraries
+	- notify the user when screen is missing
+	- added some sensible compiler options
+	- added ARDUINOCONST variable
+	- search for build tools on AVRTOOLSPATH
+	- added AVRDUDECONF variable and try to detect avrdude.conf
+
+version 0.1 - 25th January 2012
+
+	- initial version

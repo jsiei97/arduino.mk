@@ -1,0 +1,28 @@
+This Arduino makefile was created and is maintained by Tim Marston <tim@ed.am>.
+But the following people have assisted with or contributed to development and
+deserve to be mentioned.
+
+* Alessandro Pasotti <apasotti@gmail.com> and his LUG for help testing and
+  advice on default values.
+
+* Dan Marston for help with OS X testing and the use of his hardware.
+
+* Cooper Baker <cooperbaker@gmail.com> for improvements to OS X support.
+
+* Mark Steward <marksteward@gmail.com> for support for the Leonardo.
+
+* Carsten Wartmann <c.wartmann@gmx.de> for fixes and testing towards supporting
+  busybox.
+
+* Josh Levine <josh.levine05@imperial.ac.uk> for fixing path expansion in
+  compiler arguments.
+
+* Mark A. Greenwood <m.greenwood@dcs.shef.ac.uk> for support for the sketchbook
+  "libraries" directory and burning bootloaders.
+
+* Jos Muysers <josmuysers@gmail.com> for fixing support for the "caterina"
+  bootloader on the Leonardo.
+
+* Robert Marsanyi <rnm@whidbey.com> for help with Leonardo/Fio support.
+
+* Jan Spakula <s3+flabbergast@sdfeu.org> for helping to improve OS X support.

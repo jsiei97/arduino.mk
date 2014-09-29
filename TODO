@@ -1,0 +1,7 @@
+TODO
+
+  - add win32 support (bug 1)
+  - fix library inclusion (bug 3)
+  - add support for arduino-1.5 and the Arduino Duo (see
+    https://github.com/arduino/Arduino/tree/ide-1.5.x).
+  - look at adding support for "build cores" and "upload protocols"
